@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus</title>
+    <link rel="stylesheet" href="static/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+<!-- Login Page -->
+<div id="login-page" class="login-page">
+    <div class="login-box">
+        <h2>Nexus</h2>
+        <div id="login-error" class="error"></div>
+        <input type="text" id="login-user" placeholder="Username" autofocus>
+        <input type="password" id="login-pass" placeholder="Password">
+        <button class="btn" style="width:100%" id="login-btn">Login</button>
+    </div>
+</div>
+
+<!-- App -->
+<div id="app" class="hidden">
+    <header>
+        <h1>Nexus</h1>
+        <div class="user-info">
+            <span id="current-user"></span>
+            <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark/light mode"></button>
+            <button onclick="doLogout()">Logout</button>
+        </div>
+    </header>
+    <nav id="nav">
+        <a onclick="showPage('feed')" data-page="feed">Feed</a>
+        <a onclick="showPage('bulletin')" data-page="bulletin">Bulletin<span id="bulletin-badge" class="nav-badge hidden"></span></a>
+        <a onclick="showPage('profile')" data-page="profile">Profile</a>
+        <a onclick="showPage('token')" data-page="token">API</a>
+        <a onclick="showPage('admin')" data-page="admin" id="nav-admin">Admin</a>
+    </nav>
+    <!-- Group + Project selector bar -->
+    <div id="selector-bar" class="selector-bar hidden">
+        <div class="selector-row">
+            <label>Group:</label>
+            <select id="group-select" onchange="onGroupChange()"></select>
+            <label style="margin-left:12px">Project:</label>
+            <select id="project-select" onchange="onProjectChange()"></select>
+            <button class="btn btn-sm" onclick="createProject()" title="New Project" style="margin-left:4px">+</button>
+            <button class="btn btn-danger btn-sm" id="del-project-btn" onclick="deleteProject()" title="Delete Project" style="margin-left:2px;display:none">&minus;</button>
+            <button class="btn btn-sm" id="archive-project-btn" onclick="toggleArchiveProject()" title="Archive/Unarchive" style="margin-left:2px;display:none;background:#6c757d"></button>
+            <button class="btn btn-sm" id="workdir-project-btn" onclick="setProjectWorkDir()" title="Set Work Directory" style="margin-left:2px;display:none;background:#e67e22">Dir</button>
+            <button class="btn btn-sm" id="participants-btn" onclick="openParticipants()" title="Manage Participants" style="margin-left:2px;display:none;background:#5b8def">People</button>
+            <label id="show-archived-label" style="margin-left:8px;font-size:0.8em;display:none;cursor:pointer;color:var(--meta)">
+                <input type="checkbox" id="show-archived-cb" onchange="onShowArchivedChange()"> Archived
+            </label>
+            <span id="workdir-label" class="meta" style="margin-left:6px"></span>
+        </div>
+    </div>
+    <div class="container" id="content"></div>
+</div>
+
+<!-- Templates -->
+<template id="tpl-feed">
+    <div>
+        <div class="card mb-12">
+            <textarea id="msg-input" placeholder="Write a message..." onkeydown="if(event.ctrlKey&&event.key==='Enter'){sendMessage()}"></textarea>
+            <div class="attach-zone" id="attach-zone" onclick="document.getElementById('msg-file-input').click()">
+                <span>Click or drag files here to attach</span>
+                <input type="file" id="msg-file-input" multiple onchange="addAttachments(this.files)">
+            </div>
+            <div id="attach-preview"></div>
+            <div id="upload-progress-bar" class="progress-bar hidden">
+                <div id="upload-progress-fill" class="progress-fill"></div>
+                <span id="upload-progress-text" class="progress-text"></span>
+            </div>
+            <div id="msg-schedule-row" class="schedule-row hidden">
+                <input type="datetime-local" id="msg-schedule-input">
+                <span class="meta">Scheduled send (local time)</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center" class="mt-12">
+                <span class="meta" id="msg-target-info"></span>
+                <div>
+                    <button class="btn btn-sm" id="msg-schedule-btn" onclick="toggleScheduleRow('msg')" title="Schedule send" style="background:#8e5cf7;display:none">⏰</button>
+                    <button class="btn" id="send-btn" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </div>
+        <div id="pinned-section" class="hidden">
+            <div class="pinned-header">&#9873; Pending</div>
+            <div id="pinned-list"></div>
+            <div class="pinned-divider"></div>
+        </div>
+        <div id="msg-list"></div>
+    </div>
+</template>
+
+<template id="tpl-bulletin">
+    <div>
+        <div class="card mb-12" id="bulletin-compose" style="display:none">
+            <textarea id="bulletin-input" placeholder="Post a bulletin to all users..." onkeydown="if(event.ctrlKey&&event.key==='Enter'){sendBulletin()}"></textarea>
+            <div class="attach-zone" id="bulletin-attach-zone" onclick="document.getElementById('bulletin-file-input').click()">
+                <span>Click or drag files to attach</span>
+                <input type="file" id="bulletin-file-input" multiple onchange="addBulletinAttachments(this.files)">
+            </div>
+            <div id="bulletin-attach-preview"></div>
+            <div id="bulletin-progress-bar" class="progress-bar hidden">
+                <div id="bulletin-progress-fill" class="progress-fill"></div>
+                <span id="bulletin-progress-text" class="progress-text"></span>
+            </div>
+            <div id="bulletin-schedule-row" class="schedule-row hidden">
+                <input type="datetime-local" id="bulletin-schedule-input">
+                <span class="meta">Scheduled send (local time)</span>
+            </div>
+            <div class="mt-12" style="text-align:right">
+                <button class="btn btn-sm" id="bulletin-schedule-btn" onclick="toggleScheduleRow('bulletin')" title="Schedule send" style="background:#8e5cf7">⏰</button>
+                <button class="btn" id="bulletin-send-btn" onclick="sendBulletin()">Post Bulletin</button>
+            </div>
+        </div>
+        <div id="bulletin-list"></div>
+    </div>
+</template>
+
+<template id="tpl-profile">
+    <div>
+        <div class="card">
+            <h3 class="mb-12">My Profile</h3>
+            <label style="font-size:0.85em;color:#555">Username</label>
+            <input type="text" id="profile-username" disabled style="background:#f5f5f5">
+            <label style="font-size:0.85em;color:#555">Email</label>
+            <input type="text" id="profile-email" placeholder="your@email.com">
+            <label style="font-size:0.85em;color:#555">My Groups</label>
+            <div id="profile-groups" class="mb-12" style="padding:6px 0"></div>
+            <button class="btn" onclick="saveProfile()">Save Email</button>
+            <span id="profile-msg" class="meta" style="margin-left:12px"></span>
+        </div>
+        <div class="card mt-12">
+            <h3 class="mb-12">Change Password</h3>
+            <input type="password" id="profile-newpass" placeholder="New password">
+            <input type="password" id="profile-newpass2" placeholder="Confirm new password">
+            <button class="btn" onclick="changePassword()">Change Password</button>
+            <span id="profile-pass-msg" class="meta" style="margin-left:12px"></span>
+        </div>
+    </div>
+</template>
+
+<template id="tpl-token">
+    <div>
+        <div class="card">
+            <h3 class="mb-12">API Token</h3>
+            <p class="meta mb-12">Use this token to access Nexus API from scripts or command line.</p>
+            <div id="token-display" class="mb-12" style="font-family:monospace;background:#f5f5f5;padding:10px;border-radius:4px;word-break:break-all;min-height:20px"></div>
+            <button class="btn" onclick="generateToken()">Generate New Token</button>
+        </div>
+        <div class="card mt-12">
+            <h3 class="mb-12">Usage Examples</h3>
+            <pre style="background:#f5f5f5;padding:12px;border-radius:4px;overflow-x:auto;font-size:0.8em;line-height:1.6" id="api-examples"></pre>
+        </div>
+    </div>
+</template>
+
+<template id="tpl-admin">
+    <div>
+        <div class="card mb-12">
+            <h3 class="mb-12">Create Group</h3>
+            <div style="display:flex;gap:8px">
+                <input type="text" id="new-group-name" placeholder="Group name" style="margin-bottom:0;flex:1">
+                <button class="btn" onclick="createGroup()">Create</button>
+            </div>
+        </div>
+        <h3 class="mb-12">Groups</h3>
+        <div id="group-list" class="mb-12"></div>
+        <hr style="margin:20px 0;border:none;border-top:1px solid #eee">
+        <div class="card mb-12">
+            <h3 class="mb-12">Create User</h3>
+            <input type="text" id="new-username" placeholder="Username">
+            <input type="password" id="new-password" placeholder="Password">
+            <input type="text" id="new-email" placeholder="Email (optional)">
+            <div id="new-user-groups" class="mb-12"></div>
+            <label style="display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:0.9em">
+                <input type="checkbox" id="new-is-admin"> Admin privileges
+            </label>
+            <button class="btn" onclick="createUser()">Create</button>
+        </div>
+        <h3 class="mb-12">Users</h3>
+        <div id="user-list"></div>
+    </div>
+</template>
+
+<!-- Lightbox overlay -->
+<div id="lightbox" class="lightbox hidden" onclick="closeLightbox()">
+    <img id="lightbox-img" src="">
+</div>
+
+<!-- Floating quote button (injected by JS, placed here for reference) -->
+
+<!-- Ref preview modal -->
+<div id="ref-modal" class="ref-modal-overlay hidden" onclick="if(event.target===this)closeRefModal()">
+    <div class="ref-modal-box">
+        <div class="ref-modal-topbar">
+            <span id="ref-modal-label" class="ref-modal-label"></span>
+            <div style="display:flex;gap:6px">
+                <button class="btn btn-sm" id="ref-goto-btn" onclick="goToRefProject()" style="display:none">Go to project</button>
+                <button class="btn btn-sm" style="background:var(--meta)" onclick="closeRefModal()">Close</button>
+            </div>
+        </div>
+        <div id="ref-modal-body" class="ref-modal-body"></div>
+    </div>
+</div>
+
+<script>
+// --- Theme (runs immediately) ---
+function applyTheme(dark) {
+    if (dark) {
+        document.body.classList.add('dark');
+    } else {
+        document.body.classList.remove('dark');
+    }
+    var btn = document.getElementById('theme-toggle');
+    if (btn) btn.textContent = dark ? '\u2600' : '\u263E';
+}
+function toggleTheme() {
+    var isDark = !document.body.classList.contains('dark');
+    applyTheme(isDark);
+    try { localStorage.setItem('nexus_theme', isDark ? 'dark' : 'light'); } catch(e) {}
+}
+// Apply saved preference on load
+(function() {
+    var saved = null;
+    try { saved = localStorage.getItem('nexus_theme'); } catch(e) {}
+    if (saved === 'dark') {
+        document.body.classList.add('dark');
+    } else if (!saved && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add('dark');
+    }
+})();
+
+var API = '/nexus/api';
+var currentUser = null;
+var userGroups = [];
+var allGroups = [];
+var selectedGroupId = null;
+var selectedProjectId = null;
+var groupProjects = [];
+var pendingAttachments = [];
+var _moveProjectCache = {};
+var loginInProgress = false;
+var showArchivedProjects = false;
+var PAGE_SIZE = 30;
+var _msgRefCache = {};   // id -> message data, shared across all ref lookups
+var _currentRefData = null; // data for the currently open ref modal
+var feedPage = { loading: false, hasMore: true, oldestId: null };
+var bulletinPage = { loading: false, hasMore: true, oldestId: null };
+var adminGroupsPage = { offset: 0, hasMore: true, loading: false, total: 0 };
+var adminUsersPage = { offset: 0, hasMore: true, loading: false, total: 0 };
+
+// --- API helper ---
+function api(path, opts) {
+    opts = opts || {};
+    var url = API + path;
+    var fetchOpts = { credentials: 'same-origin' };
+    if (opts.method) fetchOpts.method = opts.method;
+    if (opts.body && opts.body instanceof FormData) {
+        fetchOpts.body = opts.body;
+    } else if (opts.body) {
+        fetchOpts.headers = { 'Content-Type': 'application/json' };
+        fetchOpts.body = JSON.stringify(opts.body);
+    }
+    return fetch(url, fetchOpts).then(function(res) {
+        return res.text().then(function(text) {
+            var data = null;
+            try { data = JSON.parse(text); } catch(e) {}
+            if (!res.ok) {
+                var msg = (data && data.error) ? data.error : 'HTTP ' + res.status;
+                throw new Error(msg);
+            }
+            return data;
+        });
+    });
+}
+
+// --- Auth ---
+function checkSession() {
+    api('/me').then(function(data) {
+        if (loginInProgress) return;
+        currentUser = data;
+        userGroups = (data && data.groups) || [];
+        showApp();
+    }).catch(function() {
+        if (loginInProgress) return;
+        showLogin();
+    });
+}
+
+function doLogin() {
+    var username = document.getElementById('login-user').value.trim();
+    var password = document.getElementById('login-pass').value;
+    var errEl = document.getElementById('login-error');
+    errEl.style.display = 'none';
+    if (!username || !password) {
+        errEl.textContent = 'Please enter username and password';
+        errEl.style.display = 'block';
+        return;
+    }
+    loginInProgress = true;
+    api('/login', { method: 'POST', body: { username: username, password: password } })
+        .then(function(data) {
+            currentUser = { username: data.username, is_admin: data.is_admin, email: '', groups: data.groups || [] };
+            userGroups = currentUser.groups;
+            loginInProgress = false;
+            showApp();
+        })
+        .catch(function(e) {
+            loginInProgress = false;
+            errEl.textContent = e.message || 'Login failed';
+            errEl.style.display = 'block';
+        });
+}
+
+function doLogout() {
+    api('/logout', { method: 'POST' }).catch(function(){});
+    currentUser = null;
+    userGroups = [];
+    showLogin();
+}
+
+function showLogin() {
+    document.getElementById('login-page').classList.remove('hidden');
+    document.getElementById('app').classList.add('hidden');
+    document.getElementById('login-pass').value = '';
+}
+
+function showApp() {
+    document.getElementById('login-page').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    document.getElementById('current-user').textContent = currentUser.username;
+    document.getElementById('nav-admin').classList.toggle('hidden', !currentUser.is_admin);
+    applyTheme(document.body.classList.contains('dark'));
+    updateBulletinBadge(currentUser.unread_bulletins || 0);
+    startBulletinPoll();
+    initQuoteBtn();
+    initGroupSelector();
+    showPage('feed');
+}
+
+function updateBulletinBadge(count) {
+    var badge = document.getElementById('bulletin-badge');
+    if (!badge) return;
+    if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.classList.remove('hidden');
+    } else {
+        badge.classList.add('hidden');
+    }
+}
+
+var _bulletinPollTimer = null;
+function startBulletinPoll() {
+    if (_bulletinPollTimer) clearInterval(_bulletinPollTimer);
+    _bulletinPollTimer = setInterval(function() {
+        var active = document.querySelector('nav a.active');
+        if (active && active.dataset.page === 'bulletin') return; // already viewing
+        api('/me').then(function(data) {
+            updateBulletinBadge(data.unread_bulletins || 0);
+        }).catch(function() {});
+    }, 120000); // check every 2 minutes
+}
+
+document.getElementById('login-btn').addEventListener('click', function(e) { e.preventDefault(); doLogin(); });
+document.getElementById('login-pass').addEventListener('keydown', function(e) { if (e.key === 'Enter') doLogin(); });
+document.getElementById('login-user').addEventListener('keydown', function(e) { if (e.key === 'Enter') document.getElementById('login-pass').focus(); });
+
+// --- Recent-click ordering (localStorage) ---
+function _recentOrder(key) {
+    try { return JSON.parse(localStorage.getItem(key)) || {}; } catch(e) { return {}; }
+}
+function _touchRecent(key, id) {
+    var m = _recentOrder(key);
+    m[id] = Date.now();
+    try { localStorage.setItem(key, JSON.stringify(m)); } catch(e) {}
+}
+function _sortByRecent(arr, key, idFn) {
+    var m = _recentOrder(key);
+    return arr.slice().sort(function(a, b) {
+        return (m[idFn(b)] || 0) - (m[idFn(a)] || 0);
+    });
+}
+
+// --- Group + Project selectors ---
+function initGroupSelector() {
+    var bar = document.getElementById('selector-bar');
+    var sel = document.getElementById('group-select');
+    sel.innerHTML = '';
+    if (userGroups.length === 0 && !currentUser.is_admin) {
+        bar.classList.add('hidden');
+        selectedGroupId = null;
+        selectedProjectId = null;
+        return;
+    }
+    bar.classList.remove('hidden');
+    var sorted = _sortByRecent(userGroups, 'nexus_group_order', function(g) { return g.id; });
+    if (sorted.length > 1 || currentUser.is_admin) {
+        var opt0 = document.createElement('option');
+        opt0.value = '';
+        opt0.textContent = '-- Select Group --';
+        sel.appendChild(opt0);
+    }
+    sorted.forEach(function(g) {
+        var opt = document.createElement('option');
+        opt.value = g.id;
+        opt.textContent = g.name;
+        sel.appendChild(opt);
+    });
+    if (sorted.length === 1) {
+        sel.value = sorted[0].id;
+        selectedGroupId = sorted[0].id;
+    } else {
+        selectedGroupId = null;
+    }
+    loadProjects();
+}
+
+function onGroupChange() {
+    var v = document.getElementById('group-select').value;
+    selectedGroupId = v ? parseInt(v) : null;
+    if (selectedGroupId) _touchRecent('nexus_group_order', selectedGroupId);
+    selectedProjectId = null;
+    loadProjects();
+}
+
+function loadProjects(onLoaded) {
+    var sel = document.getElementById('project-select');
+    sel.innerHTML = '';
+    groupProjects = [];
+    var prevProjectId = selectedProjectId;
+    selectedProjectId = null;
+    if (!selectedGroupId) {
+        sel.innerHTML = '<option value="">--</option>';
+        refreshFeedIfActive();
+        return;
+    }
+    var pqp = '/projects?group_id=' + selectedGroupId + (showArchivedProjects ? '&show_archived=1' : '');
+    api(pqp).then(function(projects) {
+        groupProjects = projects || [];
+        if (groupProjects.length === 0) {
+            sel.innerHTML = '<option value="">No projects yet</option>';
+        } else {
+            // Sort: non-archived by recent click desc, archived always at bottom
+            var active = groupProjects.filter(function(p) { return !p.archived; });
+            var archived = groupProjects.filter(function(p) { return p.archived; });
+            active = _sortByRecent(active, 'nexus_project_order', function(p) { return p.id; });
+            var sorted = active.concat(archived);
+            if (sorted.length > 1) {
+                var opt0 = document.createElement('option');
+                opt0.value = '';
+                opt0.textContent = '-- Select Project --';
+                sel.appendChild(opt0);
+            }
+            sorted.forEach(function(p) {
+                var opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.archived ? '[Archived] ' + p.name : p.name;
+                if (p.archived) opt.style.color = '#888';
+                sel.appendChild(opt);
+            });
+            // Restore previous selection if still valid, otherwise auto-select if only 1
+            var restored = false;
+            if (prevProjectId) {
+                for (var i = 0; i < sorted.length; i++) {
+                    if (sorted[i].id === prevProjectId) {
+                        sel.value = prevProjectId;
+                        selectedProjectId = prevProjectId;
+                        restored = true;
+                        break;
+                    }
+                }
+            }
+            if (!restored && active.length === 1 && !archived.length) {
+                sel.value = active[0].id;
+                selectedProjectId = active[0].id;
+            }
+        }
+        updateDeleteProjectBtn();
+        refreshFeedIfActive();
+        if (typeof onLoaded === 'function') onLoaded();
+    }).catch(function() {
+        sel.innerHTML = '<option value="">--</option>';
+        refreshFeedIfActive();
+    });
+}
+
+function onProjectChange() {
+    var v = document.getElementById('project-select').value;
+    selectedProjectId = v ? parseInt(v) : null;
+    if (selectedProjectId) _touchRecent('nexus_project_order', selectedProjectId);
+    updateDeleteProjectBtn();
+    refreshFeedIfActive();
+}
+
+function updateDeleteProjectBtn() {
+    var delBtn = document.getElementById('del-project-btn');
+    var wdBtn = document.getElementById('workdir-project-btn');
+    var archBtn = document.getElementById('archive-project-btn');
+    var partBtn = document.getElementById('participants-btn');
+    var archLabel = document.getElementById('show-archived-label');
+    var wdLabel = document.getElementById('workdir-label');
+    // Show archived checkbox for all users
+    if (archLabel) archLabel.style.display = selectedGroupId ? '' : 'none';
+    if (!selectedProjectId) {
+        delBtn.style.display = 'none';
+        wdBtn.style.display = 'none';
+        archBtn.style.display = 'none';
+        if (partBtn) partBtn.style.display = 'none';
+        wdLabel.textContent = '';
+        return;
+    }
+    var proj = groupProjects.find(function(p) { return p.id === selectedProjectId; });
+    var canManage = proj && (proj.creator === currentUser.username || currentUser.is_admin);
+    delBtn.style.display = canManage ? '' : 'none';
+    if (partBtn) partBtn.style.display = canManage ? '' : 'none';
+    // Archive button
+    if (canManage && archBtn) {
+        archBtn.style.display = '';
+        archBtn.textContent = proj.archived ? 'Unarchive' : 'Archive';
+        archBtn.style.background = proj.archived ? '#28a745' : '#6c757d';
+    } else if (archBtn) {
+        archBtn.style.display = 'none';
+    }
+    // Work dir button (admin only)
+    wdBtn.style.display = currentUser.is_admin ? '' : 'none';
+    if (proj && proj.work_dir) {
+        wdLabel.textContent = 'sync: ' + proj.work_dir + '/OA/';
+    } else {
+        wdLabel.textContent = '';
+    }
+}
+
+function toggleArchiveProject() {
+    if (!selectedProjectId) return;
+    var proj = groupProjects.find(function(p) { return p.id === selectedProjectId; });
+    if (!proj) return;
+    var newState = proj.archived ? 0 : 1;
+    var action = newState ? 'archive' : 'unarchive';
+    if (!confirm(action.charAt(0).toUpperCase() + action.slice(1) + ' project "' + proj.name + '"?')) return;
+    api('/projects/' + selectedProjectId, { method: 'PUT', body: { archived: newState } })
+        .then(function() { loadProjects(); })
+        .catch(function(e) { alert(e.message); });
+}
+
+function onShowArchivedChange() {
+    showArchivedProjects = document.getElementById('show-archived-cb').checked;
+    loadProjects();
+}
+
+function openParticipants() {
+    if (!selectedProjectId) return;
+    var proj = groupProjects.find(function(p) { return p.id === selectedProjectId; });
+    if (!proj) return;
+    api('/projects/' + selectedProjectId + '/members').then(function(members) {
+        var rows = members.map(function(u) {
+            return '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer">'
+                + '<input type="checkbox" value="' + u.id + '" ' + (u.in_project ? 'checked' : '') + '>'
+                + '<span>' + esc(u.username) + '</span>'
+                + '<span class="meta" style="margin-left:auto">' + esc(u.email || '') + '</span>'
+                + '</label>';
+        }).join('');
+        var noneHint = '<div class="meta" style="margin-bottom:8px">No checked users = broadcast to entire group.</div>';
+        var html = '<div class="ref-modal-overlay" id="part-modal" onclick="if(event.target===this)closeParticipants()">'
+            + '<div class="ref-modal-box" style="max-width:480px">'
+            + '<div class="ref-modal-topbar"><strong>Participants: ' + esc(proj.name) + '</strong>'
+            + '<button class="btn btn-sm" onclick="closeParticipants()">\u2715</button></div>'
+            + '<div class="ref-modal-body">'
+            + noneHint
+            + (rows || '<div class="meta">No group members.</div>')
+            + '<div style="text-align:right;margin-top:12px">'
+            + '<button class="btn" onclick="saveParticipants()">Save</button>'
+            + '</div></div></div></div>';
+        var host = document.createElement('div');
+        host.innerHTML = html;
+        document.body.appendChild(host.firstChild);
+    }).catch(function(e) { alert('Failed to load members: ' + e.message); });
+}
+
+function closeParticipants() {
+    var m = document.getElementById('part-modal');
+    if (m) m.remove();
+}
+
+function saveParticipants() {
+    var modal = document.getElementById('part-modal');
+    if (!modal) return;
+    var ids = Array.prototype.slice.call(modal.querySelectorAll('input[type=checkbox]:checked'))
+        .map(function(cb) { return parseInt(cb.value); });
+    api('/projects/' + selectedProjectId + '/members', { method: 'PUT', body: { user_ids: ids } })
+        .then(function() {
+            closeParticipants();
+            _moveProjectCache = {};
+            loadProjects();
+        })
+        .catch(function(e) { alert('Save failed: ' + e.message); });
+}
+
+function setProjectWorkDir() {
+    if (!selectedProjectId) return;
+    var proj = groupProjects.find(function(p) { return p.id === selectedProjectId; });
+    var current = (proj && proj.work_dir) || '';
+    var wd = prompt('Work directory name (under /Users/zhenningli/work/ust-jumper/).\nLeave empty to disable sync.', current);
+    if (wd === null) return; // cancelled
+    api('/projects/' + selectedProjectId, { method: 'PUT', body: { work_dir: wd.trim() } })
+        .then(function() { loadProjects(); })
+        .catch(function(e) { alert(e.message); });
+}
+
+function createProject() {
+    if (!selectedGroupId) { alert('Please select a group first'); return; }
+    var name = prompt('New project name:');
+    if (!name || !name.trim()) return;
+    api('/projects', { method: 'POST', body: { name: name.trim(), group_id: selectedGroupId } })
+        .then(function(data) {
+            loadProjects();
+        })
+        .catch(function(e) { alert(e.message); });
+}
+
+function deleteProject() {
+    if (!selectedProjectId) return;
+    var proj = groupProjects.find(function(p) { return p.id === selectedProjectId; });
+    if (!confirm('Delete project "' + (proj ? proj.name : '') + '"?\nAll messages and files in this project will be deleted.')) return;
+    api('/projects/' + selectedProjectId, { method: 'DELETE' })
+        .then(function() { selectedProjectId = null; loadProjects(); })
+        .catch(function(e) { alert(e.message); });
+}
+
+function refreshFeedIfActive() {
+    var active = document.querySelector('nav a.active');
+    if (active && active.dataset.page === 'feed') { feedPage = { loading: false, hasMore: true, oldestId: null }; loadFeed(false); }
+}
+
+// --- Pages ---
+function showPage(page) {
+    document.querySelectorAll('nav a').forEach(function(a) {
+        a.classList.toggle('active', a.dataset.page === page);
+    });
+    var tpl = document.getElementById('tpl-' + page);
+    var content = document.getElementById('content');
+    content.innerHTML = '';
+    content.appendChild(tpl.content.cloneNode(true));
+    if (page === 'feed') initFeed();
+    if (page === 'bulletin') initBulletin();
+    if (page === 'profile') loadProfile();
+    if (page === 'admin') loadAdmin();
+    if (page === 'token') loadToken();
+}
+
+// --- 48h countdown for pending posts ---
+var COUNTDOWN_MS = 48 * 3600 * 1000;
+
+function _buildCountdown(createdAt) {
+    if (!createdAt) return '';
+    var posted = new Date(createdAt + 'Z').getTime();
+    var deadline = posted + COUNTDOWN_MS;
+    var remain = deadline - Date.now();
+    if (remain <= 0) {
+        var overH = Math.floor(-remain / 3600000);
+        return '<span class="countdown overdue">OVERDUE ' + overH + 'h</span>';
+    }
+    var h = Math.floor(remain / 3600000);
+    var m = Math.floor((remain % 3600000) / 60000);
+    var cls = h < 6 ? 'countdown urgent' : 'countdown';
+    return '<span class="' + cls + '">' + h + 'h ' + m + 'm left</span>';
+}
+
+// --- Shared: render message card HTML ---
+function renderMsgCard(m, deleteFunc) {
+    var attachHtml = '';
+    if (m.attachments && m.attachments.length) {
+        attachHtml = '<div class="msg-attachments">' + m.attachments.map(function(a) {
+            if (isImage(a.filename)) {
+                return '<div class="msg-img-wrap">'
+                    + '<img class="msg-img-thumb" src="' + API + '/files/' + a.id + '/preview" alt="' + esc(a.filename) + '" onclick="openLightbox(this.src)" onerror="this.style.display=\'none\'">'
+                    + '<a href="' + API + '/files/' + a.id + '/download" class="msg-img-label">&#128206; ' + esc(a.filename) + ' (' + formatSize(a.size) + ')</a>'
+                    + '</div>';
+            }
+            return '<a href="' + API + '/files/' + a.id + '/download">&#128206; ' + esc(a.filename) + ' (' + formatSize(a.size) + ')</a>';
+        }).join('') + '</div>';
+    }
+    var isPending = !m.resolved;
+    var resolveHtml = currentUser.is_admin
+        ? '<label class="resolve-label" onclick="event.stopPropagation()" title="' + (isPending ? 'Mark as done' : 'Mark as pending') + '">'
+            + '<input type="checkbox" ' + (isPending ? '' : 'checked') + ' onchange="toggleResolve(' + m.id + ',this.checked)">'
+            + (isPending ? ' Pending' : ' Done') + '</label>'
+        : '';
+    var moveHtml = (currentUser.is_admin && m.group_id)
+        ? '<select class="move-project-sel" data-msg-id="' + m.id + '" data-group-id="' + m.group_id + '" data-cur-project="' + (m.project_id || '') + '" onfocus="populateMoveDropdown(this)" onchange="movePost(this)" onclick="event.stopPropagation()" title="Move to another project"><option value="">Move to\u2026</option></select>'
+        : '';
+    var countdownHtml = '';
+    if (isPending && !m.is_announcement && currentUser.is_admin) {
+        countdownHtml = _buildCountdown(m.created_at);
+    }
+    var scheduledHtml = m.scheduled_at
+        ? '<span class="badge badge-scheduled" title="Not yet sent">\u23F0 Scheduled ' + _formatScheduledLocal(m.scheduled_at) + '</span> '
+        : '';
+    return '<div class="card msg-card' + (isPending ? ' msg-pending' : '') + (m.scheduled_at ? ' msg-scheduled' : '') + '" id="msg-' + m.id + '">'
+        + '<button class="copy-ref-btn" onclick="insertRef(' + m.id + ')" title="Copy reference">##' + m.id + '</button>'
+        + (currentUser.is_admin && deleteFunc ? '<button class="btn btn-danger btn-sm" style="float:right;margin-left:4px" onclick="' + deleteFunc + '(' + m.id + ')">Del</button>' : '')
+        + resolveHtml
+        + moveHtml
+        + '<span class="msg-author">' + esc(m.author) + '</span> '
+        + (m.group_name ? '<span class="badge">' + esc(m.group_name) + '</span> ' : '')
+        + (m.project_name ? '<span class="badge badge-project">' + esc(m.project_name) + '</span> ' : '')
+        + scheduledHtml
+        + '<span class="meta">' + formatTime(m.created_at) + '</span>'
+        + countdownHtml
+        + (m.content ? '<div class="msg-content md-body">' + renderMsgContent(m.content) + '</div>' : '')
+        + attachHtml
+        + '</div>';
+}
+
+// --- Feed (Messages + Attachments) ---
+function initFeed() {
+    pendingAttachments = [];
+    feedPage = { loading: false, hasMore: true, oldestId: null };
+    setTimeout(_flushPendingQuote, 50);
+    var zone = document.getElementById('attach-zone');
+    if (zone) {
+        zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('dragover'); });
+        zone.addEventListener('dragleave', function() { zone.classList.remove('dragover'); });
+        zone.addEventListener('drop', function(e) {
+            e.preventDefault(); zone.classList.remove('dragover');
+            addAttachments(e.dataTransfer.files);
+        });
+    }
+    var schBtn = document.getElementById('msg-schedule-btn');
+    if (schBtn) schBtn.style.display = currentUser.is_admin ? '' : 'none';
+    loadFeed(false);
+}
+
+function toggleScheduleRow(kind) {
+    var row = document.getElementById(kind + '-schedule-row');
+    var input = document.getElementById(kind + '-schedule-input');
+    if (!row || !input) return;
+    if (row.classList.contains('hidden')) {
+        // Default to 1 hour from now, local time
+        var d = new Date(Date.now() + 3600 * 1000);
+        var pad = function(n) { return n < 10 ? '0' + n : n; };
+        input.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+            'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        row.classList.remove('hidden');
+    } else {
+        _hideScheduleRow(kind);
+    }
+}
+
+function _hideScheduleRow(kind) {
+    var row = document.getElementById(kind + '-schedule-row');
+    var input = document.getElementById(kind + '-schedule-input');
+    if (row) row.classList.add('hidden');
+    if (input) input.value = '';
+}
+
+function _getScheduledAtUTC(kind) {
+    var row = document.getElementById(kind + '-schedule-row');
+    if (!row || row.classList.contains('hidden')) return null;
+    var input = document.getElementById(kind + '-schedule-input');
+    if (!input || !input.value) return null;
+    var ts = new Date(input.value).getTime();
+    if (isNaN(ts)) { alert('Invalid scheduled time'); return false; }
+    if (ts <= Date.now()) { alert('Scheduled time must be in the future'); return false; }
+    return new Date(ts).toISOString();
+}
+
+function _feedBaseQp() {
+    if (selectedProjectId) return '?project_id=' + selectedProjectId;
+    if (selectedGroupId)   return '?group_id='   + selectedGroupId;
+    return null;
+}
+
+// Pinned section: all unresolved posts, no pagination
+function loadPinnedFeed() {
+    var base = _feedBaseQp();
+    var section = document.getElementById('pinned-section');
+    var list    = document.getElementById('pinned-list');
+    if (!list || !section) return;
+    // When no group/project selected, fetch pending across all accessible groups
+    var qp = base ? (base + '&resolved=0&limit=200') : '?resolved=0&limit=200';
+    api('/messages' + qp).then(function(resp) {
+        var msgs = resp.items || resp;
+        if (!msgs.length) { section.classList.add('hidden'); list.innerHTML = ''; return; }
+        section.classList.remove('hidden');
+        list.innerHTML = msgs.map(function(m) { return renderMsgCard(m, 'deleteMessage'); }).join('');
+        resolveRefs(list);
+    }).catch(function() { section.classList.add('hidden'); });
+}
+
+function loadFeed(append) {
+    if (feedPage.loading) return;
+    if (append && !feedPage.hasMore) return;
+    feedPage.loading = true;
+
+    if (!append) {
+        loadPinnedFeed();
+        var infoEl = document.getElementById('msg-target-info');
+        if (infoEl) {
+            if (selectedGroupId && selectedProjectId) {
+                var g = userGroups.find(function(x) { return x.id === selectedGroupId; });
+                var p = groupProjects.find(function(x) { return x.id === selectedProjectId; });
+                infoEl.textContent = (g ? g.name : '?') + ' / ' + (p ? p.name : '?');
+            } else {
+                infoEl.textContent = selectedGroupId ? 'Select a project' : 'Select a group and project';
+            }
+        }
+    }
+
+    var base = _feedBaseQp();
+    if (!base) { feedPage.loading = false; return; }
+    var qp = base + '&resolved=1&limit=' + PAGE_SIZE;
+    if (append && feedPage.oldestId) qp += '&before_id=' + feedPage.oldestId;
+
+    api('/messages' + qp).then(function(resp) {
+        feedPage.loading = false;
+        var msgs = resp.items || resp;
+        feedPage.hasMore = resp.has_more !== undefined ? resp.has_more : (msgs.length >= PAGE_SIZE);
+        if (msgs.length > 0) feedPage.oldestId = msgs[msgs.length - 1].id;
+        var list = document.getElementById('msg-list');
+        if (!list) return;
+        var html = msgs.map(function(m) { return renderMsgCard(m, 'deleteMessage'); }).join('');
+        var oldSentinel = document.getElementById('feed-sentinel');
+        if (oldSentinel) oldSentinel.remove();
+        if (append) {
+            list.insertAdjacentHTML('beforeend', html);
+        } else {
+            list.innerHTML = html || '<div class="empty-state">No messages yet</div>';
+        }
+        if (feedPage.hasMore) {
+            list.insertAdjacentHTML('beforeend', '<div id="feed-sentinel" class="scroll-sentinel">Scroll for older messages...</div>');
+        }
+        resolveRefs(list);
+    }).catch(function(e) { feedPage.loading = false; console.error('[Nexus] loadFeed:', e); });
+}
+
+function toggleResolve(id, checked) {
+    // checked=true means "Done" checkbox ticked → resolved=1
+    api('/messages/' + id, { method: 'PUT', body: { resolved: checked ? 1 : 0 } })
+        .then(function() {
+            feedPage = { loading: false, hasMore: true, oldestId: null };
+            loadFeed(false);
+        })
+        .catch(function(e) { alert(e.message); });
+}
+
+function populateMoveDropdown(sel) {
+    var gid = parseInt(sel.dataset.groupId);
+    var curPid = sel.dataset.curProject ? parseInt(sel.dataset.curProject) : null;
+    if (!gid || sel.dataset.populated) return;
+    sel.dataset.populated = '1';
+    function _fill(projects) {
+        sel.innerHTML = '<option value="">Move to\u2026</option>';
+        projects.forEach(function(p) {
+            if (p.id !== curPid) {
+                var o = document.createElement('option');
+                o.value = p.id;
+                o.textContent = p.name + (p.archived ? ' [archived]' : '');
+                sel.appendChild(o);
+            }
+        });
+    }
+    if (_moveProjectCache[gid]) {
+        _fill(_moveProjectCache[gid]);
+    } else {
+        api('/projects?group_id=' + gid + '&show_archived=1').then(function(projects) {
+            _moveProjectCache[gid] = projects || [];
+            _fill(_moveProjectCache[gid]);
+        });
+    }
+}
+
+function movePost(sel) {
+    var newPid = parseInt(sel.value);
+    if (!newPid) return;
+    var msgId = parseInt(sel.dataset.msgId);
+    api('/messages/' + msgId, { method: 'PUT', body: { project_id: newPid } })
+        .then(function() {
+            _moveProjectCache = {};
+            feedPage = { loading: false, hasMore: true, oldestId: null };
+            loadPinnedFeed();
+            loadFeed(false);
+        })
+        .catch(function(e) { alert('Move failed: ' + e.message); sel.value = ''; });
+}
+
+function addAttachments(fileList) {
+    for (var i = 0; i < fileList.length; i++) pendingAttachments.push(fileList[i]);
+    renderAttachPreview();
+    document.getElementById('msg-file-input').value = '';
+}
+
+function removeAttachment(idx) {
+    pendingAttachments.splice(idx, 1);
+    renderAttachPreview();
+}
+
+function _renderAttachList(elId, list, removeFn) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    if (!list.length) { el.innerHTML = ''; return; }
+    el.innerHTML = list.map(function(f, i) {
+        return '<span class="attach-preview-item">'
+            + esc(f.name) + ' (' + formatSize(f.size) + ')'
+            + ' <span class="remove-attach" onclick="' + removeFn + '(' + i + ')">&times;</span>'
+            + '</span>';
+    }).join('');
+}
+function renderAttachPreview() { _renderAttachList('attach-preview', pendingAttachments, 'removeAttachment'); }
+
+var FILE_KEYWORDS = ['文件','附件','上传','下载','资料','图片','截图','照片','视频','音频','表格',
+    'file','attach','upload','image','photo','screenshot','document','pdf','excel','ppt','doc'];
+
+function hasFileKeyword(text) {
+    var lower = text.toLowerCase();
+    for (var i = 0; i < FILE_KEYWORDS.length; i++) {
+        if (lower.indexOf(FILE_KEYWORDS[i]) !== -1) return true;
+    }
+    return false;
+}
+
+function uploadWithProgress(fd, onSuccess, onError) {
+    var xhr = new XMLHttpRequest();
+    var progressBar = document.getElementById('upload-progress-bar');
+    var progressFill = document.getElementById('upload-progress-fill');
+    var progressText = document.getElementById('upload-progress-text');
+    var showTimer = null;
+
+    showTimer = setTimeout(function() {
+        if (progressBar) progressBar.classList.remove('hidden');
+    }, 1000);
+
+    xhr.upload.onprogress = function(e) {
+        if (!e.lengthComputable) return;
+        var pct = Math.round(e.loaded / e.total * 100);
+        if (progressFill) progressFill.style.width = pct + '%';
+        if (progressText) progressText.textContent = pct + '% (' + formatSize(e.loaded) + ' / ' + formatSize(e.total) + ')';
+    };
+
+    xhr.onload = function() {
+        clearTimeout(showTimer);
+        if (progressBar) { progressBar.classList.add('hidden'); }
+        if (progressFill) { progressFill.style.width = '0%'; }
+        if (xhr.status >= 200 && xhr.status < 300) {
+            onSuccess();
+        } else {
+            var data = null;
+            try { data = JSON.parse(xhr.responseText); } catch(e) {}
+            onError(new Error((data && data.error) || 'HTTP ' + xhr.status));
+        }
+    };
+
+    xhr.onerror = function() {
+        clearTimeout(showTimer);
+        if (progressBar) { progressBar.classList.add('hidden'); }
+        onError(new Error('Network error'));
+    };
+
+    xhr.open('POST', API + '/messages');
+    xhr.withCredentials = true;
+    xhr.send(fd);
+}
+
+var optimisticIdCounter = 0;
+var SEND_TIMEOUT_MS = 120000; // 120s timeout
+
+function insertOptimisticMessage(content, attachmentNames) {
+    var id = '__opt_' + (++optimisticIdCounter);
+    var list = document.getElementById('msg-list');
+    if (!list) return id;
+    var g = userGroups.find(function(x) { return x.id === selectedGroupId; });
+    var now = new Date().toLocaleString();
+    var attachHtml = '';
+    if (attachmentNames && attachmentNames.length) {
+        attachHtml = '<div class="msg-attachments">' + attachmentNames.map(function(name) {
+            return '<span class="attach-preview-item" style="cursor:default">&#128206; ' + esc(name) + '</span>';
+        }).join('') + '</div>';
+    }
+    var html = '<div class="card" id="' + id + '">'
+        + '<span class="msg-author">' + esc(currentUser.username) + '</span> '
+        + (g ? '<span class="badge">' + esc(g.name) + '</span> ' : '')
+        + '<span class="meta">' + now + '</span> '
+        + '<span class="msg-status sending" id="' + id + '-status">sending...</span>'
+        + (content ? '<div class="msg-content md-body">' + renderMd(content) + '</div>' : '')
+        + attachHtml
+        + '</div>';
+    list.insertAdjacentHTML('afterbegin', html);
+    return id;
+}
+
+function markMessageStatus(optId, success) {
+    var el = document.getElementById(optId + '-status');
+    if (!el) return;
+    if (success) {
+        el.textContent = 'sent';
+        el.className = 'msg-status sent';
+        setTimeout(function() { if (el) { el.style.opacity = '0'; setTimeout(function() { if (el.parentNode) el.remove(); }, 500); } }, 3000);
+    } else {
+        el.textContent = 'failed';
+        el.className = 'msg-status failed';
+    }
+}
+
+function sendMessage() {
+    var input = document.getElementById('msg-input');
+    var content = input.value.trim();
+    if (!content && !pendingAttachments.length) return;
+
+    if (!selectedGroupId) { alert('Please select a group'); return; }
+    if (!selectedProjectId) { alert('Please select a project'); return; }
+
+    var scheduledAt = _getScheduledAtUTC('msg');
+    if (scheduledAt === false) return;  // invalid → abort
+
+    // Keyword detection
+    if (content && pendingAttachments.length === 0 && hasFileKeyword(content)) {
+        if (!confirm('Your message mentions files/attachments but none are attached. Send anyway?')) return;
+    }
+
+    var attachNames = pendingAttachments.map(function(f) { return f.name; });
+
+    // Optimistic: insert message immediately (skip for scheduled — reload shows it)
+    var optId = scheduledAt ? null : insertOptimisticMessage(content, attachNames);
+
+    // Clear input right away
+    input.value = '';
+    var savedAttachments = pendingAttachments.slice();
+    pendingAttachments = [];
+    renderAttachPreview();
+    _hideScheduleRow('msg');
+
+    // Timeout timer (skip for scheduled — no optimistic card to time out)
+    var timedOut = false;
+    var timeoutTimer = scheduledAt ? null : setTimeout(function() {
+        timedOut = true;
+        markMessageStatus(optId, false);
+    }, SEND_TIMEOUT_MS);
+
+    function onSuccess() {
+        if (timedOut) return;
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        if (scheduledAt) {
+            feedPage = { loading: false, hasMore: true, oldestId: null };
+            loadFeed(false);
+        } else {
+            markMessageStatus(optId, true);
+            setTimeout(function() { feedPage = { loading: false, hasMore: true, oldestId: null }; loadFeed(false); }, 15000);
+        }
+    }
+
+    function onError(e) {
+        if (timedOut) return;
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+        if (!scheduledAt) markMessageStatus(optId, false);
+        else alert('Schedule failed: ' + (e && e.message || 'unknown'));
+    }
+
+    if (savedAttachments.length > 0) {
+        var fd = new FormData();
+        fd.append('content', content);
+        fd.append('group_id', String(selectedGroupId));
+        fd.append('project_id', String(selectedProjectId));
+        if (scheduledAt) fd.append('scheduled_at', scheduledAt);
+        for (var i = 0; i < savedAttachments.length; i++) {
+            fd.append('file', savedAttachments[i]);
+        }
+        var sendBtn = document.getElementById('send-btn');
+        if (sendBtn) sendBtn.disabled = true;
+        uploadWithProgress(fd,
+            function() { if (sendBtn) sendBtn.disabled = false; onSuccess(); },
+            function(e) { if (sendBtn) sendBtn.disabled = false; onError(e); }
+        );
+    } else {
+        var body = { content: content, group_id: selectedGroupId, project_id: selectedProjectId };
+        if (scheduledAt) body.scheduled_at = scheduledAt;
+        api('/messages', { method: 'POST', body: body })
+            .then(onSuccess)
+            .catch(onError);
+    }
+}
+
+function deleteMessage(id) {
+    if (!confirm('Delete this message and its attachments?')) return;
+    api('/messages/' + id, { method: 'DELETE' }).then(function() {
+        feedPage = { loading: false, hasMore: true, oldestId: null };
+        loadFeed(false);
+    });
+}
+
+// --- Bulletin ---
+var bulletinAttachments = [];
+
+function initBulletin() {
+    bulletinAttachments = [];
+    // Mark bulletins as seen and clear badge
+    api('/announcements/seen', { method: 'POST' }).catch(function() {});
+    updateBulletinBadge(0);
+    if (currentUser.is_admin) {
+        var compose = document.getElementById('bulletin-compose');
+        if (compose) compose.style.display = '';
+        var zone = document.getElementById('bulletin-attach-zone');
+        if (zone) {
+            zone.addEventListener('dragover', function(e) { e.preventDefault(); zone.classList.add('dragover'); });
+            zone.addEventListener('dragleave', function() { zone.classList.remove('dragover'); });
+            zone.addEventListener('drop', function(e) {
+                e.preventDefault(); zone.classList.remove('dragover');
+                addBulletinAttachments(e.dataTransfer.files);
+            });
+        }
+    }
+    bulletinPage = { loading: false, hasMore: true, oldestId: null };
+    loadBulletins(false);
+}
+
+function addBulletinAttachments(fileList) {
+    for (var i = 0; i < fileList.length; i++) bulletinAttachments.push(fileList[i]);
+    renderBulletinAttachPreview();
+    var fi = document.getElementById('bulletin-file-input');
+    if (fi) fi.value = '';
+}
+
+function removeBulletinAttachment(idx) {
+    bulletinAttachments.splice(idx, 1);
+    renderBulletinAttachPreview();
+}
+
+function renderBulletinAttachPreview() { _renderAttachList('bulletin-attach-preview', bulletinAttachments, 'removeBulletinAttachment'); }
+
+function renderBulletinCard(m) {
+    var attachHtml = '';
+    if (m.attachments && m.attachments.length) {
+        attachHtml = '<div class="msg-attachments">' + m.attachments.map(function(a) {
+            if (isImage(a.filename)) {
+                return '<div class="msg-img-wrap">'
+                    + '<img class="msg-img-thumb" src="' + API + '/files/' + a.id + '/preview" alt="' + esc(a.filename) + '" onclick="openLightbox(this.src)" onerror="this.style.display=\'none\'">'
+                    + '<a href="' + API + '/files/' + a.id + '/download" class="msg-img-label">&#128206; ' + esc(a.filename) + ' (' + formatSize(a.size) + ')</a>'
+                    + '</div>';
+            }
+            return '<a href="' + API + '/files/' + a.id + '/download">&#128206; ' + esc(a.filename) + ' (' + formatSize(a.size) + ')</a>';
+        }).join('') + '</div>';
+    }
+    var scheduledHtml = m.scheduled_at
+        ? '<span class="badge badge-scheduled" title="Not yet sent">\u23F0 Scheduled ' + _formatScheduledLocal(m.scheduled_at) + '</span> '
+        : '';
+    return '<div class="card' + (m.scheduled_at ? ' msg-scheduled' : '') + '">'
+        + '<span class="msg-author">' + esc(m.author) + '</span> '
+        + '<span class="badge badge-announce">BULLETIN</span> '
+        + scheduledHtml
+        + '<span class="meta">' + formatTime(m.created_at) + '</span>'
+        + (currentUser.is_admin ? ' <button class="btn btn-danger btn-sm" style="float:right" onclick="deleteBulletin(' + m.id + ')">Del</button>' : '')
+        + (m.content ? '<div class="msg-content md-body">' + renderMd(m.content) + '</div>' : '')
+        + attachHtml
+        + '</div>';
+}
+
+function loadBulletins(append) {
+    if (bulletinPage.loading) return;
+    if (append && !bulletinPage.hasMore) return;
+    bulletinPage.loading = true;
+    var qp = '?limit=' + PAGE_SIZE;
+    if (append && bulletinPage.oldestId) qp += '&before_id=' + bulletinPage.oldestId;
+    api('/announcements' + qp).then(function(resp) {
+        bulletinPage.loading = false;
+        var items = resp.items || resp;
+        bulletinPage.hasMore = resp.has_more !== undefined ? resp.has_more : (items.length >= PAGE_SIZE);
+        if (items.length > 0) bulletinPage.oldestId = items[items.length - 1].id;
+        var list = document.getElementById('bulletin-list');
+        if (!list) return;
+        var html = items.map(renderBulletinCard).join('');
+        var oldSentinel = document.getElementById('bulletin-sentinel');
+        if (oldSentinel) oldSentinel.remove();
+        if (append) {
+            list.insertAdjacentHTML('beforeend', html);
+        } else {
+            if (!items.length) { list.innerHTML = '<div class="empty-state">No bulletins yet</div>'; return; }
+            list.innerHTML = html;
+        }
+        if (bulletinPage.hasMore) {
+            list.insertAdjacentHTML('beforeend', '<div id="bulletin-sentinel" class="scroll-sentinel">Scroll for older bulletins...</div>');
+        }
+    }).catch(function(e) { bulletinPage.loading = false; console.error('[Nexus] loadBulletins:', e); });
+}
+
+function sendBulletin() {
+    var input = document.getElementById('bulletin-input');
+    var content = input.value.trim();
+    if (!content && !bulletinAttachments.length) return;
+
+    var scheduledAt = _getScheduledAtUTC('bulletin');
+    if (scheduledAt === false) return;
+
+    input.value = '';
+    var savedAttachments = bulletinAttachments.slice();
+    bulletinAttachments = [];
+    renderBulletinAttachPreview();
+    _hideScheduleRow('bulletin');
+
+    function onDone() { bulletinPage = { loading: false, hasMore: true, oldestId: null }; loadBulletins(false); }
+    function onErr(e) { alert(e.message); }
+
+    if (savedAttachments.length > 0) {
+        var fd = new FormData();
+        fd.append('content', content);
+        if (scheduledAt) fd.append('scheduled_at', scheduledAt);
+        for (var i = 0; i < savedAttachments.length; i++) {
+            fd.append('file', savedAttachments[i]);
+        }
+        var btn = document.getElementById('bulletin-send-btn');
+        if (btn) btn.disabled = true;
+        var xhr = new XMLHttpRequest();
+        var progressBar = document.getElementById('bulletin-progress-bar');
+        var progressFill = document.getElementById('bulletin-progress-fill');
+        var progressText = document.getElementById('bulletin-progress-text');
+        var showTimer = setTimeout(function() { if (progressBar) progressBar.classList.remove('hidden'); }, 1000);
+        xhr.upload.onprogress = function(e) {
+            if (!e.lengthComputable) return;
+            var pct = Math.round(e.loaded / e.total * 100);
+            if (progressFill) progressFill.style.width = pct + '%';
+            if (progressText) progressText.textContent = pct + '% (' + formatSize(e.loaded) + ' / ' + formatSize(e.total) + ')';
+        };
+        xhr.onload = function() {
+            clearTimeout(showTimer);
+            if (progressBar) progressBar.classList.add('hidden');
+            if (progressFill) progressFill.style.width = '0%';
+            if (btn) btn.disabled = false;
+            if (xhr.status >= 200 && xhr.status < 300) { onDone(); } else {
+                var data = null; try { data = JSON.parse(xhr.responseText); } catch(e) {}
+                onErr(new Error((data && data.error) || 'HTTP ' + xhr.status));
+            }
+        };
+        xhr.onerror = function() { clearTimeout(showTimer); if (progressBar) progressBar.classList.add('hidden'); if (btn) btn.disabled = false; onErr(new Error('Network error')); };
+        xhr.open('POST', API + '/announcements');
+        xhr.withCredentials = true;
+        xhr.send(fd);
+    } else {
+        var body = { content: content };
+        if (scheduledAt) body.scheduled_at = scheduledAt;
+        api('/announcements', { method: 'POST', body: body })
+            .then(onDone).catch(onErr);
+    }
+}
+
+function deleteBulletin(id) {
+    if (!confirm('Delete this bulletin?')) return;
+    api('/announcements/' + id, { method: 'DELETE' }).then(function() { bulletinPage = { loading: false, hasMore: true, oldestId: null }; loadBulletins(false); });
+}
+
+// --- Profile ---
+function loadProfile() {
+    document.getElementById('profile-username').value = currentUser.username;
+    document.getElementById('profile-email').value = currentUser.email || '';
+    var groupsDiv = document.getElementById('profile-groups');
+    if (userGroups.length === 0) {
+        groupsDiv.innerHTML = '<span class="meta">Not in any group</span>';
+    } else {
+        groupsDiv.innerHTML = userGroups.map(function(g) { return '<span class="badge">' + esc(g.name) + '</span> '; }).join('');
+    }
+}
+
+function saveProfile() {
+    var email = document.getElementById('profile-email').value.trim();
+    var msgEl = document.getElementById('profile-msg');
+    api('/me', { method: 'PUT', body: { email: email } })
+        .then(function() { currentUser.email = email; msgEl.textContent = 'Saved!'; msgEl.style.color = '#0d7c2e'; setTimeout(function() { msgEl.textContent = ''; }, 2000); })
+        .catch(function(e) { msgEl.textContent = e.message; msgEl.style.color = '#c53030'; });
+}
+
+function changePassword() {
+    var p1 = document.getElementById('profile-newpass').value;
+    var p2 = document.getElementById('profile-newpass2').value;
+    var msgEl = document.getElementById('profile-pass-msg');
+    if (!p1) { msgEl.textContent = 'Enter a new password'; msgEl.style.color = '#c53030'; return; }
+    if (p1 !== p2) { msgEl.textContent = 'Passwords do not match'; msgEl.style.color = '#c53030'; return; }
+    api('/me', { method: 'PUT', body: { password: p1 } })
+        .then(function() { document.getElementById('profile-newpass').value = ''; document.getElementById('profile-newpass2').value = ''; msgEl.textContent = 'Password changed!'; msgEl.style.color = '#0d7c2e'; setTimeout(function() { msgEl.textContent = ''; }, 2000); })
+        .catch(function(e) { msgEl.textContent = e.message; msgEl.style.color = '#c53030'; });
+}
+
+// --- Token ---
+function loadToken() {
+    api('/token').then(function(data) {
+        document.getElementById('token-display').textContent = data.token || '(no token generated yet)';
+        var base = location.href.replace(/\/[^\/]*$/, '');
+        document.getElementById('api-examples').textContent =
+            '# Send message with attachments\n'
+            + 'curl -X POST -H "Authorization: Bearer TOKEN" \\\n'
+            + '     -F "content=Here is the report" \\\n'
+            + '     -F "group_id=1" -F "project_id=1" \\\n'
+            + '     -F "file=@report.pdf" \\\n'
+            + '     ' + base + '/api/messages\n\n'
+            + '# Send text-only message\n'
+            + 'curl -X POST -H "Authorization: Bearer TOKEN" \\\n'
+            + '     -H "Content-Type: application/json" \\\n'
+            + '     -d \'{"content":"hello","group_id":1,"project_id":1}\' \\\n'
+            + '     ' + base + '/api/messages\n\n'
+            + '# Download file\n'
+            + 'curl -H "Authorization: Bearer TOKEN" \\\n'
+            + '     ' + base + '/api/files/1/download -O\n\n'
+            + '# List projects in a group\n'
+            + 'curl -H "Authorization: Bearer TOKEN" \\\n'
+            + '     ' + base + '/api/projects?group_id=1';
+    }).catch(function(e) { console.error(e); });
+}
+
+function generateToken() {
+    if (!confirm('This will invalidate your existing token. Continue?')) return;
+    api('/token/generate', { method: 'POST' }).then(function(data) {
+        document.getElementById('token-display').textContent = data.token;
+    }).catch(function(e) { alert(e.message); });
+}
+
+// --- Admin ---
+function loadAdmin() {
+    adminGroupsPage = { offset: 0, hasMore: true, loading: false, total: 0 };
+    adminUsersPage = { offset: 0, hasMore: true, loading: false, total: 0 };
+    allGroups = [];
+    loadAdminGroups(false);
+    loadAdminUsers(false);
+    // Also fetch all groups (no limit) for the "Create User" group checkboxes
+    api('/groups').then(function(data) {
+        var items = data.items || data;
+        allGroups = items || [];
+        renderNewUserGroupCheckboxes();
+    }).catch(function() {});
+}
+
+function loadAdminGroups(append) {
+    if (adminGroupsPage.loading) return;
+    adminGroupsPage.loading = true;
+    var qp = '?limit=' + PAGE_SIZE + '&offset=' + adminGroupsPage.offset;
+    api('/groups' + qp).then(function(resp) {
+        adminGroupsPage.loading = false;
+        var groups = resp.items || resp;
+        adminGroupsPage.hasMore = resp.has_more || false;
+        adminGroupsPage.total = resp.total || 0;
+        adminGroupsPage.offset += groups.length;
+        renderAdminGroups(groups, append);
+    }).catch(function(e) { adminGroupsPage.loading = false; console.error(e); });
+}
+
+function renderAdminGroups(groups, append) {
+    var list = document.getElementById('group-list');
+    if (!list) return;
+    // Remove old Load More button
+    var oldBtn = document.getElementById('groups-load-more');
+    if (oldBtn) oldBtn.remove();
+    var html = groups.map(function(g) {
+        var memberBadges = g.members.map(function(m) {
+            return '<span class="badge">' + esc(m) + ' <a href="#" onclick="removeMember(' + g.id + ',\'' + esc(m) + '\');return false;" style="color:#c5221f;text-decoration:none;font-weight:bold" title="Remove">&times;</a></span> ';
+        }).join('');
+        return '<div class="card mb-12">'
+            + '<div style="display:flex;justify-content:space-between;align-items:center">'
+            + '<div><strong>' + esc(g.name) + '</strong> <span class="meta">(' + g.members.length + ' members)</span></div>'
+            + '<button class="btn btn-danger btn-sm" onclick="deleteGroup(' + g.id + ')">Delete</button>'
+            + '</div>'
+            + '<div class="mt-12">' + (memberBadges || '<span class="meta">No members</span>') + '</div>'
+            + '<div style="display:flex;gap:8px;margin-top:8px">'
+            + '<input type="text" id="add-member-' + g.id + '" placeholder="Username to add" style="margin-bottom:0;flex:1;font-size:0.85em;padding:6px 8px">'
+            + '<button class="btn btn-sm" onclick="addMember(' + g.id + ')">Add</button>'
+            + '</div></div>';
+    }).join('');
+    if (append) {
+        list.insertAdjacentHTML('beforeend', html);
+    } else {
+        if (!groups.length) { list.innerHTML = '<div class="empty-state">No groups yet</div>'; return; }
+        list.innerHTML = html;
+    }
+    if (adminGroupsPage.hasMore) {
+        list.insertAdjacentHTML('beforeend', '<button id="groups-load-more" class="load-more-btn" onclick="loadAdminGroups(true)">Load more groups (' + adminGroupsPage.offset + ' of ' + adminGroupsPage.total + ')</button>');
+    }
+}
+
+function renderNewUserGroupCheckboxes() {
+    var container = document.getElementById('new-user-groups');
+    if (!allGroups.length) { container.innerHTML = ''; return; }
+    container.innerHTML = '<label style="font-size:0.85em;color:#555;margin-bottom:4px;display:block">Groups:</label>'
+        + allGroups.map(function(g) {
+            return '<label style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;font-size:0.9em">'
+                + '<input type="checkbox" value="' + g.id + '" class="new-user-group-cb"> ' + esc(g.name) + '</label>';
+        }).join('');
+}
+
+function createGroup() {
+    var input = document.getElementById('new-group-name');
+    var name = input.value.trim();
+    if (!name) return;
+    api('/groups', { method: 'POST', body: { name: name } })
+        .then(function() { input.value = ''; loadAdmin(); return api('/me'); })
+        .then(function(me) { userGroups = (me && me.groups) || []; initGroupSelector(); })
+        .catch(function(e) { alert(e.message); });
+}
+
+function deleteGroup(id) {
+    if (!confirm('Delete this group? All projects, messages and files in it will be deleted.')) return;
+    api('/groups/' + id, { method: 'DELETE' })
+        .then(function() { loadAdmin(); return api('/me'); })
+        .then(function(me) { userGroups = (me && me.groups) || []; initGroupSelector(); })
+        .catch(function(e) { alert(e.message); });
+}
+
+function addMember(gid) {
+    var input = document.getElementById('add-member-' + gid);
+    var username = input.value.trim();
+    if (!username) return;
+    api('/groups/' + gid + '/members', { method: 'POST', body: { username: username } })
+        .then(function() { input.value = ''; loadAdmin(); })
+        .catch(function(e) { alert(e.message); });
+}
+
+function removeMember(gid, username) {
+    if (!confirm('Remove ' + username + ' from group?')) return;
+    api('/groups/' + gid + '/members/' + username, { method: 'DELETE' })
+        .then(function() { loadAdmin(); })
+        .catch(function(e) { alert(e.message); });
+}
+
+function loadAdminUsers(append) {
+    if (adminUsersPage.loading) return;
+    adminUsersPage.loading = true;
+    var qp = '?limit=' + PAGE_SIZE + '&offset=' + adminUsersPage.offset;
+    api('/users' + qp).then(function(resp) {
+        adminUsersPage.loading = false;
+        var users = resp.items || resp;
+        adminUsersPage.hasMore = resp.has_more || false;
+        adminUsersPage.total = resp.total || 0;
+        adminUsersPage.offset += users.length;
+        var list = document.getElementById('user-list');
+        if (!list) return;
+        var oldBtn = document.getElementById('users-load-more');
+        if (oldBtn) oldBtn.remove();
+        var html = users.map(function(u) {
+            var groupBadges = u.groups.map(function(g) { return '<span class="badge">' + esc(g.name) + '</span>'; }).join(' ');
+            return '<div class="card mb-12"><div class="user-row"><div>'
+                + '<strong>' + esc(u.username) + '</strong> '
+                + (u.is_admin ? '<span class="badge badge-admin">admin</span>' : '<span class="badge">user</span>') + ' '
+                + groupBadges
+                + '<div class="meta">' + (u.email ? esc(u.email) : 'no email') + ' &middot; Created: ' + formatTime(u.created_at) + '</div>'
+                + '</div>'
+                + '<button class="btn btn-danger btn-sm" onclick="deleteUser(' + u.id + ',\'' + esc(u.username) + '\')">Delete</button>'
+                + '</div></div>';
+        }).join('');
+        if (append) {
+            list.insertAdjacentHTML('beforeend', html);
+        } else {
+            if (!users.length) { list.innerHTML = '<div class="empty-state">No users</div>'; return; }
+            list.innerHTML = html;
+        }
+        if (adminUsersPage.hasMore) {
+            list.insertAdjacentHTML('beforeend', '<button id="users-load-more" class="load-more-btn" onclick="loadAdminUsers(true)">Load more users (' + adminUsersPage.offset + ' of ' + adminUsersPage.total + ')</button>');
+        }
+    }).catch(function(e) { adminUsersPage.loading = false; console.error(e); });
+}
+
+function createUser() {
+    var username = document.getElementById('new-username').value.trim();
+    var password = document.getElementById('new-password').value;
+    var email = document.getElementById('new-email').value.trim();
+    var is_admin = document.getElementById('new-is-admin').checked;
+    var cbs = document.querySelectorAll('.new-user-group-cb:checked');
+    var groups = [];
+    for (var i = 0; i < cbs.length; i++) groups.push(parseInt(cbs[i].value));
+    if (!username || !password) { alert('Username and password required'); return; }
+    api('/users', { method: 'POST', body: { username: username, password: password, email: email, is_admin: is_admin, groups: groups } })
+        .then(function() {
+            document.getElementById('new-username').value = '';
+            document.getElementById('new-password').value = '';
+            document.getElementById('new-email').value = '';
+            document.getElementById('new-is-admin').checked = false;
+            var cbs2 = document.querySelectorAll('.new-user-group-cb');
+            for (var j = 0; j < cbs2.length; j++) cbs2[j].checked = false;
+            loadAdmin();
+        })
+        .catch(function(e) { alert(e.message); });
+}
+
+function deleteUser(id, name) {
+    if (!confirm('Delete user "' + name + '"?')) return;
+    api('/users/' + id, { method: 'DELETE' }).then(function() { loadAdmin(); });
+}
+
+// --- Helpers ---
+function esc(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
+function isImage(filename) {
+    if (!filename) return false;
+    return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(filename);
+}
+function openLightbox(src) {
+    var lb = document.getElementById('lightbox');
+    var img = document.getElementById('lightbox-img');
+    img.src = src;
+    lb.classList.remove('hidden');
+}
+function closeLightbox() {
+    document.getElementById('lightbox').classList.add('hidden');
+    document.getElementById('lightbox-img').src = '';
+}
+function renderMd(s) {
+    if (!s) return '';
+    if (typeof marked !== 'undefined') {
+        try {
+            marked.use({ renderer: { del: function(token) {
+                var inner = typeof token === 'string' ? token : (token.text || '');
+                var delim = (token.raw || '').startsWith('~~') ? '~~' : '~';
+                return delim + inner + delim;
+            } } });
+            return marked.parse(s, { breaks: true });
+        } catch(e) {}
+    }
+    return esc(s);
+}
+
+// --- Message cross-references ---
+// Render markdown + KaTeX + ##id ref chips
+function renderMsgContent(content) {
+    // Step 1: extract math blocks before markdown (prevents marked mangling _ ^ etc.)
+    var mathStore = [];
+    var PLACEHOLDER = '\x00M';
+    var safe = content
+        .replace(/\$\$([\s\S]+?)\$\$/g, function(_, tex) {
+            mathStore.push({ tex: tex, display: true });
+            return PLACEHOLDER + (mathStore.length - 1) + '\x00';
+        })
+        .replace(/\$([^\n$]+?)\$/g, function(_, tex) {
+            mathStore.push({ tex: tex, display: false });
+            return PLACEHOLDER + (mathStore.length - 1) + '\x00';
+        });
+
+    // Step 2: markdown render
+    var html = renderMd(safe);
+
+    // Step 3: restore math as KaTeX HTML
+    if (mathStore.length && typeof katex !== 'undefined') {
+        html = html.replace(/\x00M(\d+)\x00/g, function(_, i) {
+            var m = mathStore[parseInt(i)];
+            try {
+                return katex.renderToString(m.tex, { displayMode: m.display, throwOnError: false });
+            } catch(e) {
+                return esc(m.display ? '$$' + m.tex + '$$' : '$' + m.tex + '$');
+            }
+        });
+    }
+
+    // Step 4: replace ##id patterns with ref chips (skip code/pre blocks)
+    var parts = html.split(/(<pre[^>]*>[\s\S]*?<\/pre>|<code[^>]*>[\s\S]*?<\/code>)/);
+    return parts.map(function(part, i) {
+        if (i % 2 === 1) return part; // code/pre block — skip
+        return part.replace(/(<[^>]+>)|##(\d+)(?!\w)/g, function(match, tag, id) {
+            if (tag) return tag;
+            return '<span class="msg-ref loading" data-refid="' + id
+                + '" onclick="showMsgRef(' + id + ')">##' + id + '</span>';
+        });
+    }).join('');
+}
+
+// After inserting message HTML into DOM, fetch ref labels and populate chips
+function resolveRefs(container) {
+    var chips = container.querySelectorAll('.msg-ref.loading');
+    if (!chips.length) return;
+    var ids = {};
+    chips.forEach(function(c) { ids[c.dataset.refid] = true; });
+    Object.keys(ids).forEach(function(id) {
+        if (_msgRefCache[id]) {
+            _fillRefChips(container, id, _msgRefCache[id]);
+            return;
+        }
+        api('/messages/' + id).then(function(data) {
+            _msgRefCache[id] = data;
+            _fillRefChips(container, id, data);
+        }).catch(function() {
+            // Not accessible — just remove loading state, keep bare ##id
+            container.querySelectorAll('.msg-ref.loading[data-refid="' + id + '"]')
+                .forEach(function(c) { c.classList.remove('loading'); });
+        });
+    });
+}
+
+function _fillRefChips(container, id, data) {
+    var label = data.project_name ? '[' + data.project_name + ' #' + data.project_seq + ']' : '[#' + id + ']';
+    var preview = (data.content || '').replace(/\s+/g, ' ').slice(0, 45);
+    if ((data.content || '').length > 45) preview += '…';
+    var full = label + (preview ? ' ' + preview : '');
+    container.querySelectorAll('.msg-ref[data-refid="' + id + '"]').forEach(function(c) {
+        c.textContent = full;
+        c.classList.remove('loading');
+    });
+}
+
+// Show ref preview modal
+function showMsgRef(id) {
+    var modal = document.getElementById('ref-modal');
+    var body = document.getElementById('ref-modal-body');
+    var labelEl = document.getElementById('ref-modal-label');
+    var gotoBtn = document.getElementById('ref-goto-btn');
+    if (!modal) return;
+    _currentRefData = null;
+    body.innerHTML = '<div class="empty-state" style="padding:20px">Loading...</div>';
+    labelEl.textContent = '#' + id;
+    if (gotoBtn) gotoBtn.style.display = 'none';
+    modal.classList.remove('hidden');
+
+    function render(data) {
+        _currentRefData = data;
+        var heading = data.project_name
+            ? data.project_name + ' \u00b7 #' + data.project_seq
+            : '#' + data.id;
+        labelEl.textContent = heading;
+        if (gotoBtn && data.project_id) gotoBtn.style.display = '';
+        body.innerHTML = '<div class="card" style="margin:0;box-shadow:none">'
+            + '<span class="msg-author">' + esc(data.author) + '</span> '
+            + '<span class="meta">' + formatTime(data.created_at) + '</span>'
+            + (data.content ? '<div class="msg-content md-body" style="margin-top:8px">' + renderMd(data.content) + '</div>' : '')
+            + '</div>';
+    }
+
+    if (_msgRefCache[id]) { render(_msgRefCache[id]); return; }
+    api('/messages/' + id).then(function(data) {
+        _msgRefCache[id] = data;
+        render(data);
+    }).catch(function(e) {
+        body.innerHTML = '<div class="empty-state" style="color:var(--danger);padding:20px">'
+            + esc(e.message || 'Not found') + '</div>';
+    });
+}
+
+function closeRefModal() {
+    var modal = document.getElementById('ref-modal');
+    if (modal) modal.classList.add('hidden');
+    _currentRefData = null;
+}
+
+// Navigate to the project that contains the ref
+function goToRefProject() {
+    if (!_currentRefData) return;
+    var data = _currentRefData;
+    closeRefModal();
+    var nav = function() {
+        if (data.project_id) {
+            selectedProjectId = data.project_id;
+            var pSel = document.getElementById('project-select');
+            if (pSel) pSel.value = data.project_id;
+            onProjectChange();
+        }
+        // Attempt scroll-to after feed loads
+        setTimeout(function() {
+            var el = document.getElementById('msg-' + data.id);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('msg-highlight');
+                setTimeout(function() { el.classList.remove('msg-highlight'); }, 2000);
+            }
+        }, 700);
+    };
+    if (data.group_id && data.group_id !== selectedGroupId) {
+        selectedGroupId = data.group_id;
+        var gSel = document.getElementById('group-select');
+        if (gSel) gSel.value = data.group_id;
+        loadProjects(nav);
+    } else {
+        nav();
+    }
+}
+
+// Insert "##id" at cursor position in the compose textarea
+function insertRef(id) {
+    var ta = document.getElementById('msg-input');
+    if (!ta) return;
+    var ref = '##' + id;
+    var start = ta.selectionStart;
+    var end = ta.selectionEnd;
+    var before = ta.value.slice(0, start);
+    var after = ta.value.slice(end);
+    if (before.length > 0 && !/[\s\n]$/.test(before)) before += ' ';
+    ta.value = before + ref + ' ' + after;
+    var newPos = before.length + ref.length + 1;
+    ta.setSelectionRange(newPos, newPos);
+    ta.focus();
+}
+// --- Partial quote (text selection → floating Quote button) ---
+var _quoteFloatBtn = null;
+var _pendingQuote = null; // { text, msgId } saved before page switch
+
+function initQuoteBtn() {
+    if (_quoteFloatBtn) return;
+    var btn = document.createElement('button');
+    btn.id = 'quote-float-btn';
+    btn.className = 'quote-float-btn hidden';
+    btn.textContent = 'Quote';
+    btn.onmousedown = function(e) { e.preventDefault(); }; // keep selection alive
+    btn.onclick = function() { doQuoteSelection(); };
+    document.body.appendChild(btn);
+    _quoteFloatBtn = btn;
+
+    document.addEventListener('mouseup', function() { setTimeout(_checkQuoteSel, 10); });
+    document.addEventListener('keyup', function(e) {
+        if (e.shiftKey) setTimeout(_checkQuoteSel, 10); // shift+arrow selection
+    });
+    document.addEventListener('mousedown', function(e) {
+        if (e.target !== _quoteFloatBtn) _hideQuoteBtn();
+    });
+}
+
+function _findMsgCard(node) {
+    while (node && node !== document.body) {
+        if (node.classList && node.classList.contains('msg-card')) return node;
+        node = node.parentNode;
+    }
+    return null;
+}
+
+function _checkQuoteSel() {
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed) { _hideQuoteBtn(); return; }
+    var text = sel.toString().trim();
+    if (!text) { _hideQuoteBtn(); return; }
+    var card = _findMsgCard(sel.anchorNode);
+    if (!card) { _hideQuoteBtn(); return; }
+    var msgId = card.id.replace('msg-', '');
+    if (!msgId) { _hideQuoteBtn(); return; }
+
+    var range = sel.getRangeAt(0);
+    var rect = range.getBoundingClientRect();
+    _quoteFloatBtn.dataset.msgid = msgId;
+    _quoteFloatBtn.style.top  = (rect.bottom + window.scrollY + 6) + 'px';
+    _quoteFloatBtn.style.left = Math.max(0, rect.left + window.scrollX) + 'px';
+    _quoteFloatBtn.classList.remove('hidden');
+}
+
+function _hideQuoteBtn() {
+    if (_quoteFloatBtn) _quoteFloatBtn.classList.add('hidden');
+}
+
+function doQuoteSelection() {
+    var sel = window.getSelection();
+    var text = sel ? sel.toString().trim() : '';
+    var msgId = _quoteFloatBtn ? _quoteFloatBtn.dataset.msgid : null;
+    _hideQuoteBtn();
+    if (!text || !msgId) return;
+    sel.removeAllRanges();
+
+    // Build blockquote with attribution on last line
+    var lines = text.split('\n')
+        .map(function(l) { return '> ' + l.trim(); })
+        .filter(function(l) { return l !== '> '; })
+        .join('\n');
+    var insertion = lines + '\n> \u2014 ##' + msgId + '\n\n';
+
+    var ta = document.getElementById('msg-input');
+    if (!ta) {
+        // Feed not visible — switch page then insert
+        _pendingQuote = { insertion: insertion };
+        showPage('feed');
+        return;
+    }
+    _insertQuoteText(ta, insertion);
+}
+
+function _insertQuoteText(ta, insertion) {
+    var start = ta.selectionStart;
+    var before = ta.value.slice(0, start);
+    var after  = ta.value.slice(ta.selectionEnd);
+    if (before.length > 0 && !before.endsWith('\n')) before += '\n';
+    ta.value = before + insertion + after;
+    var newPos = before.length + insertion.length;
+    ta.setSelectionRange(newPos, newPos);
+    ta.focus();
+    _pendingQuote = null;
+}
+
+// Called by showPage after feed initializes, flushes any pending quote
+function _flushPendingQuote() {
+    if (!_pendingQuote) return;
+    var ta = document.getElementById('msg-input');
+    if (ta) _insertQuoteText(ta, _pendingQuote.insertion);
+}
+
+function formatTime(t) { if (!t) return ''; return new Date(t + 'Z').toLocaleString(); }
+function _formatScheduledLocal(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+}
+function formatSize(bytes) {
+    if (!bytes) return '0 B';
+    var units = ['B', 'KB', 'MB', 'GB'];
+    var i = 0;
+    while (bytes >= 1024 && i < units.length - 1) { bytes /= 1024; i++; }
+    return (i ? bytes.toFixed(1) : bytes) + ' ' + units[i];
+}
+
+// --- Infinite scroll listener ---
+var _scrollThrottle = null;
+window.addEventListener('scroll', function() {
+    if (_scrollThrottle) return;
+    _scrollThrottle = setTimeout(function() { _scrollThrottle = null; }, 200);
+    var active = document.querySelector('nav a.active');
+    if (!active) return;
+    var page = active.dataset.page;
+    if (page === 'feed') {
+        var s = document.getElementById('feed-sentinel');
+        if (s && s.getBoundingClientRect().top < window.innerHeight + 300) loadFeed(true);
+    } else if (page === 'bulletin') {
+        var s2 = document.getElementById('bulletin-sentinel');
+        if (s2 && s2.getBoundingClientRect().top < window.innerHeight + 300) loadBulletins(true);
+    }
+});
+
+// --- Init ---
+console.log('[Nexus] V3 loading');
+checkSession();
+</script>
+</body>
+</html>

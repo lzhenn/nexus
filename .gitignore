@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+nexus.db
+nexus.pid
+nexus.log
+.secret
+.env
+uploads/
+uploads_bak/
+test_*.py
+sync_oa.log
+deploy.sh
+deploy.*.sh

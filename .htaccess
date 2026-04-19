@@ -1,0 +1,3 @@
+RewriteEngine On
+RewriteRule ^api/(.*)$ http://localhost:5678/api/$1 [P,L]
+LimitRequestBody 104857600
